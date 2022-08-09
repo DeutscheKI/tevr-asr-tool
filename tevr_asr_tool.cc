@@ -1,5 +1,6 @@
 #include "absl/flags/parse.h"
 #include "absl/flags/flag.h"
+#include "absl/flags/usage.h"
 #include "absl/flags/internal/commandlineflag.h"
 #include "absl/flags/internal/private_handle_accessor.h"
 #include "absl/flags/reflection.h"
@@ -31,7 +32,6 @@
 ABSL_FLAG(std::string, target_file, "INVALID_PATH", "Path to the 16kHz WAV to analyze.");
 ABSL_FLAG(std::string, data_folder_path, "/usr/share/tevr_asr_tool", "Path to the data folder.");
 ABSL_FLAG(bool, use_language_model, true, "use the language model to boost recognition of common words");
-ABSL_FLAG(bool, quiet, false, "do not log diagnostics to stdout");
 
 const char* tokens[]= {"", " ", " ", "chen", "sche", "lich", "isch", "icht", "iche", "eine", "rden", "tion", "urde", "haft", "eich", "rung",
                        "chte", "ssen", "chaf", "nder", "tlic", "tung", "eite", "iert", "sich", "ngen", "erde", "scha", "nden", "unge", "lung",
@@ -162,10 +162,10 @@ public:
 };
 
 int main(int argc, char** argv) {
+    ::tflite::LogToStderr();
+    absl::SetProgramUsageMessage("Call this program with a --target_file parameter to perform German Automated Speech Recognition on a 16kHz PCM WAV (no float). (c) 2022 Hajo Nils Krabbenhöft @ hajo.me");
     absl::ParseCommandLine(argc, argv);
 
-    if(!absl::GetFlag(FLAGS_quiet))
-        ::tflite::LogToStderr();
     const std::string& target_file = absl::GetFlag(FLAGS_target_file);
     const std::string& data_folder_path = absl::GetFlag(FLAGS_data_folder_path);
     const bool& use_language_model = absl::GetFlag(FLAGS_use_language_model);
@@ -175,7 +175,7 @@ int main(int argc, char** argv) {
     wave::File wav_file;
     wave::Error wav_error = wav_file.Open(target_file.c_str(), wave::kIn);
     if ( wav_error == wave::kInvalidFormat) FATAL_ERROR(std::string("WAV has invalid format: ") + target_file);
-    if (wav_error) FATAL_ERROR(std::string("Could not open WAV file: ") + target_file);
+    if (wav_error) FATAL_ERROR(std::string("Could not open WAV file: ") + target_file + std::string(" Make sure to specify a --target_file parameter."));
 
     if( wav_file.channel_number() != 1) FATAL_ERRORS("WAV file is not mono");
     if( wav_file.sample_rate() != 16000) FATAL_ERRORS("WAV file is not 16kHz");
