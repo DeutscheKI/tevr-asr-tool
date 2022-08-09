@@ -31,6 +31,7 @@
 ABSL_FLAG(std::string, target_file, "INVALID_PATH", "Path to the 16kHz WAV to analyze.");
 ABSL_FLAG(std::string, data_folder_path, "/usr/share/tevr_asr_tool", "Path to the data folder.");
 ABSL_FLAG(bool, use_language_model, true, "use the language model to boost recognition of common words");
+ABSL_FLAG(bool, quiet, false, "do not log diagnostics to stdout");
 
 const char* tokens[]= {"", " ", " ", "chen", "sche", "lich", "isch", "icht", "iche", "eine", "rden", "tion", "urde", "haft", "eich", "rung",
                        "chte", "ssen", "chaf", "nder", "tlic", "tung", "eite", "iert", "sich", "ngen", "erde", "scha", "nden", "unge", "lung",
@@ -161,13 +162,14 @@ public:
 };
 
 int main(int argc, char** argv) {
-    ::tflite::LogToStderr();
     absl::ParseCommandLine(argc, argv);
 
+    if(!absl::GetFlag(FLAGS_quiet))
+        ::tflite::LogToStderr();
     const std::string& target_file = absl::GetFlag(FLAGS_target_file);
     const std::string& data_folder_path = absl::GetFlag(FLAGS_data_folder_path);
     const bool& use_language_model = absl::GetFlag(FLAGS_use_language_model);
-/*
+
     TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO, "Loading WAV ...");
 
     wave::File wav_file;
@@ -225,9 +227,8 @@ int main(int argc, char** argv) {
         copy_size = data_length * expected_dim2;
         for(int t=0;t<copy_size;t++) wave_data.emplace_back(logit_output[t]);
     }
-*/
 
-    #include "debug_logits.h"
+    // #include "debug_logits.h"
 
     lm::ngram::Config config;
     const std::string &lm_path = data_folder_path + std::string("/language_model.bin");
