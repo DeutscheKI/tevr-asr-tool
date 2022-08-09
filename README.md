@@ -19,6 +19,24 @@ the best of what's currently possible
 in German speech recognition:
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/tevr-improving-speech-recognition-by-token/speech-recognition-on-common-voice-german)](https://paperswithcode.com/sota/speech-recognition-on-common-voice-german?p=tevr-improving-speech-recognition-by-token)
 
+## How does this work?
+
+[L175-L185](https://github.com/DeutscheKI/tevr-asr-tool/blob/v1.0.0/tevr_asr_tool.cc#L175-L185) 
+load the WAV file.
+[L189-L229](https://github.com/DeutscheKI/tevr-asr-tool/blob/v1.0.0/tevr_asr_tool.cc#L189-L229)
+execute the acoustic AI model.
+[L260-L275](https://github.com/DeutscheKI/tevr-asr-tool/blob/v1.0.0/tevr_asr_tool.cc#L260-L275)
+convert the predicted token logits into string snippets.
+[L73-L162](https://github.com/DeutscheKI/tevr-asr-tool/blob/v1.0.0/tevr_asr_tool.cc#L73-L162)
+implement the Beam search re-scoring based on a KenLM language model. 
+
+If you're curious how the acoustic AI model works 
+and why I designed it that way, here's the paper:
+https://arxiv.org/abs/2206.12693
+and here's a pre-trained HuggingFace transformers model:
+https://huggingface.co/fxtentacle/wav2vec2-xls-r-1b-tevr
+
+
 ## Install the Debian/Ubuntu package
 Download `tevr_asr_tool-1.0.0-Linux-x86_64.deb` from GitHub:
 ```bash
