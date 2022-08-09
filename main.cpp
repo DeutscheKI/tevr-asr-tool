@@ -32,7 +32,7 @@ ABSL_FLAG(std::string, target_file, "INVALID_PATH", "Path to the 16kHz WAV to an
 ABSL_FLAG(std::string, data_folder_path, "/usr/share/tevr_asr_tool", "Path to the data folder.");
 ABSL_FLAG(bool, use_language_model, true, "use the language model to boost recognition of common words");
 
-const char* tokens[]= {"", "", " ", "chen", "sche", "lich", "isch", "icht", "iche", "eine", "rden", "tion", "urde", "haft", "eich", "rung",
+const char* tokens[]= {"", " ", " ", "chen", "sche", "lich", "isch", "icht", "iche", "eine", "rden", "tion", "urde", "haft", "eich", "rung",
                        "chte", "ssen", "chaf", "nder", "tlic", "tung", "eite", "iert", "sich", "ngen", "erde", "scha", "nden", "unge", "lung",
                        "mmen", "eren", "ende", "inde", "erun", "sten", "iese", "igen", "erte", "iner", "tsch", "keit", "der", "die", "ter",
                        "und", "ein", "ist", "den", "ten", "ber", "ver", "sch", "ung", "ste", "ent", "ach", "nte", "auf", "ben", "eit", "des",
@@ -48,6 +48,8 @@ const char* tokens[]= {"", "", " ", "chen", "sche", "lich", "isch", "icht", "ich
                        "o", "i", "u", "w", "p", "z", "\u00e4", "\u00fc", "v", "\u00f6", "j", "c", "y", "x", "q", "\u00e1", "\u00ed",
                        "\u014d", "\u00f3", "\u0161", "\u00e9", "\u010d", "?" };
 
+const int TOKEN_ID_END_OF_SENTENCE = 1;
+const int TOKEN_ID_SPACE = 2;
 
 TfLiteRegistration* Register_ERF();
 
@@ -82,11 +84,20 @@ public:
 
     void AddToken(int token_idx, float token_logp) {
         for(LanguageModelBeam const& old_beam : beams) {
-            std::string new_text = old_beam.text;
-            if( token_idx != old_beam.last_token_idx ) new_text += tokens[token_idx];
-            float language_model_logp = GetScoreForText(new_text);
-            AddOrSumBeam(new_text, token_logp + language_model_logp, token_idx);
+            if( token_idx == old_beam.last_token_idx ) {
+                AddOrSumBeam(old_beam.text, old_beam.logp + token_logp, token_idx);
+            } else {
+                std::string new_text = ConcatWithoutDuplicateSpaces(old_beam.text, token_idx);
+                float language_model_score_difference = GetScoreForText(new_text) - GetScoreForText(old_beam.text);
+                AddOrSumBeam(new_text, old_beam.logp + token_logp + language_model_score_difference, token_idx);
+            }
         }
+    }
+
+    std::string ConcatWithoutDuplicateSpaces(std::string const& prefix, int token_idx) {
+        if(prefix.empty()) return tokens[token_idx];
+        if(prefix.back() == ' ' and token_idx == TOKEN_ID_SPACE) return prefix;
+        return prefix + tokens[token_idx];
     }
 
     void AddOrSumBeam(std::string const& text, float logp, int last_token_idx) {
@@ -100,7 +111,16 @@ public:
     }
 
     void Reduce() {
-        // TODO: new_beams -> beams + sort + truncate
+        beams.clear();
+        for(auto addme : new_beams) beams.push_back(addme.second);
+        new_beams.clear();
+        std::sort(beams.begin(),beams.end(), [](LanguageModelBeam const& a, LanguageModelBeam const& b) {
+            return a.logp > b.logp;
+        });
+        unsigned long full_beam_count = beams.size();
+        if( full_beam_count > 500)
+            beams.erase(beams.begin()+500, beams.end());
+        TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO, "[%9d beams] \"%s\" @ %f ...", full_beam_count, beams[0].text.c_str(), beams[0].logp);
     }
 
     float GetScoreForText(std::string const& text) {
@@ -121,7 +141,8 @@ public:
             AddScoreForWord(&state, &score, text.substr(current_position, next_space - current_position));
             current_position = next_space + 1;
         }
-        AddScoreForWord(&state, &score, text.substr(current_position));
+        // ignore the last (incomplete) word
+        // AddScoreForWord(&state, &score, text.substr(current_position));
         return score;
     }
 
@@ -232,6 +253,7 @@ int main(int argc, char** argv) {
                 last_token = max_idx;
                 std::cout << tokens[max_idx];
             }
+            std::cout << std::endl;
         }
     } else {
         LanguageModelDecoder decoder;
@@ -239,7 +261,6 @@ int main(int argc, char** argv) {
         decoder.beams.emplace_back("",0.0,0);
 
         for( int t = 0; t < data_length; t++ ) {
-            std::vector<LanguageModelBeam> new_beams;
             for( int token_idx = 0; token_idx < 256; token_idx++ ) {
                 float const &token_logp = wave_data[t * 256 + token_idx];
                 if( token_logp < decoder.MIN_TOKEN_LOGP ) continue;
@@ -247,5 +268,9 @@ int main(int argc, char** argv) {
             }
             decoder.Reduce();
         }
+        decoder.AddToken(TOKEN_ID_END_OF_SENTENCE, 0.0);
+        decoder.Reduce();
+
+        std::cout << decoder.beams[0].text << std::endl;
     }
 }
