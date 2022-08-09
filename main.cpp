@@ -84,6 +84,40 @@ int main(int argc, char** argv) {
         if(acoustic_interpreters[i] == nullptr) FATAL_ERROR(std::string("Could not create interpreter for acoustic model ")+std::to_string(i));
     }
 
+    int data_length = wave_data.size();
+
+    for(int i=0;i<acoustic_interpreters.size();i++) {
+        if(i==0) {
+            if( acoustic_interpreters[i]->ResizeInputTensor(0, {1, data_length}) != kTfLiteOk ) FATAL_ERRORS("Could not resize audio input tensor.");
+        } else {
+            if( acoustic_interpreters[i]->ResizeInputTensor(0, {1, data_length, 1280}) != kTfLiteOk ) FATAL_ERRORS("Could not resize hidden state input tensor.");
+        }
+        if(acoustic_interpreters[i]->AllocateTensors() != kTfLiteOk) FATAL_ERRORS("Could not allocate tensors for acoustic model.");
+
+        float* audio_input = acoustic_interpreters[i]->typed_input_tensor<float>(0);
+        int copy_size = data_length * (i==0 ? 1 : 1280);
+        for(int t=0;t<copy_size;t++) audio_input[t] = wave_data[t];
+
+        if(acoustic_interpreters[i]->Invoke() != kTfLiteOk) FATAL_ERRORS("Could not invoke acoustic model.");
+
+        TfLiteTensor* output = acoustic_interpreters[i]->output_tensor(0);
+        if(output->dims->size != 3) FATAL_ERRORS("Wrong output dims");
+        if(output->dims->data[0] != 1) FATAL_ERRORS("Wrong output dim 0");
+        int expected_dim2 = i==3 ? 256 : 1280;
+        if(output->dims->data[2] != expected_dim2) FATAL_ERRORS("Wrong output dim 2");
+
+        data_length = output->dims->data[1];
+        wave_data.clear();
+        float* logit_output = acoustic_interpreters[i]->typed_output_tensor<float>(0);
+        copy_size = data_length * expected_dim2;
+        for(int t=0;t<copy_size;t++) wave_data.emplace_back(logit_output[t]);
+    }
+
+
+
+
+
+
     lm::ngram::Config config;
     const std::string &lm_path = data_folder_path + std::string("/language_model.bin");
     lm::ngram::TrieModel language_model(lm_path.c_str(), config);
@@ -91,17 +125,6 @@ int main(int argc, char** argv) {
     int token_idx = language_model.GetVocabulary().Index(StringPiece("mückenstiche"));
     if(token_idx != 68501) FATAL_ERRORS("Language model vocabulary is wrong.");
 
-/*
-    int wav_size = 12123;
 
-    if(interpreter->ResizeInputTensor(0, {1, wav_size}) != kTfLiteOk) FATAL_ERRORS("Could not resize audio input tensor.");
-    if(interpreter->AllocateTensors() != kTfLiteOk) FATAL_ERRORS("Could not allocate tensors for acoustic model.");
-
-    float* audio_input = interpreter->typed_input_tensor<float>(0);
-
-    if(interpreter->Invoke() != kTfLiteOk) FATAL_ERRORS("Could not invoke acoustic model.");
-
-    float* logits = interpreter->typed_output_tensor<float>(0);
-*/
 
 }
