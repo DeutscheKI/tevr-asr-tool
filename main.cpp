@@ -17,7 +17,6 @@
 #include "tensorflow/lite/model_builder.h"
 #include "tensorflow/lite/testing/util.h"
 #include "tensorflow/lite/tools/benchmark/benchmark_utils.h"
-#include "tensorflow/lite/tools/logging.h"
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -49,7 +48,96 @@ const char* tokens[]= {"", "", " ", "chen", "sche", "lich", "isch", "icht", "ich
                        "o", "i", "u", "w", "p", "z", "\u00e4", "\u00fc", "v", "\u00f6", "j", "c", "y", "x", "q", "\u00e1", "\u00ed",
                        "\u014d", "\u00f3", "\u0161", "\u00e9", "\u010d", "?" };
 
+
 TfLiteRegistration* Register_ERF();
+
+class LanguageModelBeam {
+public:
+    float logp;
+    std::string text;
+    int last_token_idx;
+
+    LanguageModelBeam(const std::string &text, float logp, int last_token_idx) : logp(logp), text(text), last_token_idx(last_token_idx) {}
+
+    void AddLogp(float add_me) {
+        if(logp > add_me)
+            logp = logp + std::log(1.0 + std::exp(add_me-logp));
+        else
+            logp = add_me + std::log(1.0 + std::exp(logp-add_me));
+    }
+};
+
+class LanguageModelDecoder {
+public:
+    lm::ngram::TrieModel* language_model;
+    std::vector<LanguageModelBeam> beams;
+    std::map<std::string,LanguageModelBeam> new_beams;
+    std::map<std::string, float> cache;
+
+    const float ALPHA = 0.7f;
+    const float BETA = 0.75f;
+    const float MIN_TOKEN_LOGP = -5.0f;
+    const float KENLM_TO_LOGITS = M_LN10; // KenLM is base 10, logits are base e
+    const float UNK_LOGP_OFFSET = -10.0;
+
+    void AddToken(int token_idx, float token_logp) {
+        for(LanguageModelBeam const& old_beam : beams) {
+            std::string new_text = old_beam.text;
+            if( token_idx != old_beam.last_token_idx ) new_text += tokens[token_idx];
+            float language_model_logp = GetScoreForText(new_text);
+            AddOrSumBeam(new_text, token_logp + language_model_logp, token_idx);
+        }
+    }
+
+    void AddOrSumBeam(std::string const& text, float logp, int last_token_idx) {
+        std::string cache_key = text + std::string("|") + std::string(tokens[last_token_idx]);
+        std::map<std::string,LanguageModelBeam>::iterator existing_beam = new_beams.find(cache_key);
+        if(existing_beam != new_beams.end()) {
+            existing_beam->second.AddLogp(logp);
+        } else {
+            new_beams.emplace(cache_key, LanguageModelBeam(text, logp, last_token_idx));
+        }
+    }
+
+    void Reduce() {
+        // TODO: new_beams -> beams + sort + truncate
+    }
+
+    float GetScoreForText(std::string const& text) {
+        std::map<std::string, float>::iterator cached_result = cache.find(text);
+        if(cached_result != cache.end()) return cached_result->second;
+
+        float score = CalculateScoreForText(text);
+        cache[text] = score;
+        return score;
+    }
+
+    float CalculateScoreForText(std::string const& text) {
+        float score = 0.0;
+        lm::ngram::TrieModel::State state = language_model->BeginSentenceState();
+        size_t current_position = 0;
+        size_t next_space = 0;
+        while ((next_space = text.find(' ', current_position)) != std::string::npos) {
+            AddScoreForWord(&state, &score, text.substr(current_position, next_space - current_position));
+            current_position = next_space + 1;
+        }
+        AddScoreForWord(&state, &score, text.substr(current_position));
+        return score;
+    }
+
+    void AddScoreForWord(lm::ngram::State *state, float *score, std::string const &word) {
+        if(word.empty() || (word.length()==1 && word[0]==' ')) return;
+        lm::ngram::SortedVocabulary const& vocabulary = language_model->GetVocabulary();
+        const lm::WordIndex idx = vocabulary.Index(word);
+        lm::ngram::State out_state;
+        const float raw_word_score = language_model->Score(*state, idx, out_state);
+        float word_score = raw_word_score * KENLM_TO_LOGITS * ALPHA + BETA;
+        if(idx == vocabulary.NotFound()) word_score += UNK_LOGP_OFFSET;
+        *state = out_state;
+        *score += word_score;
+    }
+
+};
 
 int main(int argc, char** argv) {
     ::tflite::LogToStderr();
@@ -125,24 +213,39 @@ int main(int argc, char** argv) {
     TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO, "Loading language model %s ...", lm_path.c_str());
     lm::ngram::TrieModel language_model(lm_path.c_str(), config);
 
-    int token_idx = language_model.GetVocabulary().Index(StringPiece("mückenstiche"));
-    if(token_idx != 68501) FATAL_ERRORS("Language model vocabulary is wrong.");
+    int word_idx = language_model.GetVocabulary().Index(StringPiece("mückenstiche"));
+    if(word_idx != 68501) FATAL_ERRORS("Language model vocabulary is wrong.");
 
-    int last_token = 0;
-    for(int t=0;t<data_length;t++) {
-        int max_idx = 0;
-        double max_logit = -5e17;
-        for(int i=0;i<256;i++) {
-            float const& v = wave_data[t * 256 + i];
-            if(v > max_logit) {
-                max_logit = v;
-                max_idx = i;
+    if(!use_language_model) {
+        int last_token = 0;
+        for( int t = 0; t < data_length; t++ ) {
+            int max_idx = 0;
+            double max_logit = -5e17;
+            for( int i = 0; i < 256; i++ ) {
+                float const &v = wave_data[t * 256 + i];
+                if( v > max_logit ) {
+                    max_logit = v;
+                    max_idx = i;
+                }
+            }
+            if( max_idx != last_token ) {
+                last_token = max_idx;
+                std::cout << tokens[max_idx];
             }
         }
-        if(max_idx != last_token) {
-            last_token = max_idx;
-            std::cout << tokens[max_idx];
+    } else {
+        LanguageModelDecoder decoder;
+        decoder.language_model = &language_model;
+        decoder.beams.emplace_back("",0.0,0);
+
+        for( int t = 0; t < data_length; t++ ) {
+            std::vector<LanguageModelBeam> new_beams;
+            for( int token_idx = 0; token_idx < 256; token_idx++ ) {
+                float const &token_logp = wave_data[t * 256 + token_idx];
+                if( token_logp < decoder.MIN_TOKEN_LOGP ) continue;
+                decoder.AddToken(token_idx, token_logp);
+            }
+            decoder.Reduce();
         }
     }
-
 }
