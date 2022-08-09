@@ -3,7 +3,7 @@ project(tevr_asr_tool)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(tevr_asr_tool main.cpp)
+add_executable(tevr_asr_tool main.cpp op_erf.cc)
 
 
 add_subdirectory(tensorflow_src/tensorflow/lite)

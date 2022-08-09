@@ -48,6 +48,8 @@ const char* tokens[]= {"", "", " ", "chen", "sche", "lich", "isch", "icht", "ich
                        "o", "i", "u", "w", "p", "z", "\u00e4", "\u00fc", "v", "\u00f6", "j", "c", "y", "x", "q", "\u00e1", "\u00ed",
                        "\u014d", "\u00f3", "\u0161", "\u00e9", "\u010d", "?" };
 
+TfLiteRegistration* Register_ERF();
+
 int main(int argc, char** argv) {
     ::tflite::LogToStderr();
     absl::ParseCommandLine(argc, argv);
