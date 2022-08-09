@@ -14,7 +14,7 @@
   * only 284 lines of C++ code
   * AI model on HuggingFace
 
-## Does this work?
+## High Transcription Quality
 
 In August 2022, we ranked 
 **#1 on "Speech Recognition on Common Voice German (using extra training data)"**
