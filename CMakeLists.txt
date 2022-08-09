@@ -7,6 +7,7 @@ add_executable(tevr_asr_tool main.cpp)
 
 
 add_subdirectory(tensorflow_src/tensorflow/lite)
+
 target_link_libraries(tevr_asr_tool tensorflow-lite absl::flags absl::flags_parse)
 
 
@@ -29,6 +30,30 @@ add_subdirectory(kenlm/util)
 add_subdirectory(kenlm/lm)
 
 target_link_libraries(tevr_asr_tool kenlm)
+
+
+add_library(wave
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header/data_header.h
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header/data_header.cc
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header/riff_header.h
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header/riff_header.cc
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header/fmt_header.h
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header/fmt_header.cc
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header/wave_header.h
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header/wave_header.cc
+
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header.h
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header.cc
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header_list.h
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/header_list.cc
+
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/error.h
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/file.h
+    ${PROJECT_SOURCE_DIR}/wave/src/wave/file.cc
+)
+target_include_directories(wave PUBLIC ${PROJECT_SOURCE_DIR}/wave/src)
+
+target_link_libraries(tevr_asr_tool wave)
 
 
 install(TARGETS tevr_asr_tool)

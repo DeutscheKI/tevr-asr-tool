@@ -24,10 +24,12 @@
 #include "tensorflow/lite/model.h"
 #include "tensorflow/lite/optional_debug_tools.h"
 #include "kenlm/lm/ngram_query.hh"
+#include "wave/file.h"
 
 #define FATAL_ERRORS(errormsg) {fprintf(stderr, "FATAL ERROR (line %d): %s\n", __LINE__, (errormsg)); exit(1);}
 #define FATAL_ERROR(errormsg) FATAL_ERRORS((errormsg).c_str())
 
+ABSL_FLAG(std::string, target_file, "INVALID_PATH", "Path to the 16kHz WAV to analyze.");
 ABSL_FLAG(std::string, data_folder_path, "/usr/share/tevr_asr_tool", "Path to the data folder.");
 
 const char* tokens[]= {"", "", " ", "chen", "sche", "lich", "isch", "icht", "iche", "eine", "rden", "tion", "urde", "haft", "eich", "rung",
@@ -49,7 +51,22 @@ const char* tokens[]= {"", "", " ", "chen", "sche", "lich", "isch", "icht", "ich
 int main(int argc, char** argv) {
     ::tflite::LogToStderr();
     absl::ParseCommandLine(argc, argv);
+
+    const std::string &target_file = absl::GetFlag(FLAGS_target_file);
     const std::string &data_folder_path = absl::GetFlag(FLAGS_data_folder_path);
+
+    wave::File wav_file;
+    wave::Error wav_error = wav_file.Open(target_file.c_str(), wave::kIn);
+    if ( wav_error == wave::kInvalidFormat) FATAL_ERROR(std::string("WAV has invalid format: ") + target_file);
+    if (wav_error) FATAL_ERROR(std::string("Could not open WAV file: ") + target_file);
+
+    if( wav_file.channel_number() != 1) FATAL_ERRORS("WAV file is not mono");
+    if( wav_file.sample_rate() != 16000) FATAL_ERRORS("WAV file is not 16kHz");
+
+    std::vector<float> wave_data;
+    wav_error = wav_file.Read(&wave_data);
+    if (wav_error) FATAL_ERROR(std::string("Could not read WAV file ") + target_file);
+
 
     std::vector<std::unique_ptr<tflite::FlatBufferModel>> acoustic_models;
     for(int i=0;i<4;i++) {
