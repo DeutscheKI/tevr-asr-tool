@@ -33,6 +33,8 @@ target_link_libraries(tevr_asr_tool kenlm)
 
 install(TARGETS tevr_asr_tool)
 
-SET(CPACK_GENERATOR "DEB")
-SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "Hajo Nils Krabbenhöft")
-INCLUDE(CPack)
+set(CPACK_GENERATOR "DEB")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Hajo Nils Krabbenhöft")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_PACKAGE_DESCRIPTION "German speech recognition with wav2vec 2.0 XLS-R 1B enhanced with TEVR tokens")
+include(CPack)
