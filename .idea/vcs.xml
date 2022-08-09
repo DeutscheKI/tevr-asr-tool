@@ -2,6 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/kenlm" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/tensorflow_src" vcs="Git" />
   </component>
 </project>

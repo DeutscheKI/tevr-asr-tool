@@ -7,7 +7,7 @@ add_executable(tevr_asr_tool main.cpp)
 
 
 add_subdirectory(tensorflow_src/tensorflow/lite)
-target_link_libraries(tevr_asr_tool tensorflow-lite)
+target_link_libraries(tevr_asr_tool tensorflow-lite absl::flags absl::flags_parse)
 
 
 include(kenlm/cmake/KenLMFunctions.cmake)
