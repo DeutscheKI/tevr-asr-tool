@@ -1,5 +1,4 @@
 #include "absl/flags/parse.h"
-
 #include "absl/flags/flag.h"
 #include "absl/flags/internal/commandlineflag.h"
 #include "absl/flags/internal/private_handle_accessor.h"
@@ -25,6 +24,7 @@
 #include "tensorflow/lite/optional_debug_tools.h"
 #include "kenlm/lm/ngram_query.hh"
 #include "wave/file.h"
+#include "tensorflow/lite/minimal_logging.h"
 
 #define FATAL_ERRORS(errormsg) {fprintf(stderr, "FATAL ERROR (line %d): %s\n", __LINE__, (errormsg)); exit(1);}
 #define FATAL_ERROR(errormsg) FATAL_ERRORS((errormsg).c_str())
@@ -57,6 +57,8 @@ int main(int argc, char** argv) {
     const std::string &target_file = absl::GetFlag(FLAGS_target_file);
     const std::string &data_folder_path = absl::GetFlag(FLAGS_data_folder_path);
 
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO, "Loading WAV ...");
+
     wave::File wav_file;
     wave::Error wav_error = wav_file.Open(target_file.c_str(), wave::kIn);
     if ( wav_error == wave::kInvalidFormat) FATAL_ERROR(std::string("WAV has invalid format: ") + target_file);
@@ -69,40 +71,38 @@ int main(int argc, char** argv) {
     wav_error = wav_file.Read(&wave_data);
     if (wav_error) FATAL_ERROR(std::string("Could not read WAV file ") + target_file);
 
-
-    std::vector<std::unique_ptr<tflite::FlatBufferModel>> acoustic_models;
-    for(int i=0;i<4;i++) {
-        const std::string &model_path = data_folder_path + std::string("/acoustic_model_0")+std::to_string(i)+std::string(".tflite");
-        acoustic_models.emplace_back(tflite::FlatBufferModel::BuildFromFile(model_path.c_str()));
-        if(acoustic_models[i] == nullptr) FATAL_ERROR(std::string("Could not load ")+model_path);
-    }
-
-    std::vector<std::unique_ptr<tflite::Interpreter>> acoustic_interpreters;
-    for(int i=0;i<acoustic_models.size();i++) {
-        acoustic_interpreters.emplace_back();
-        tflite::ops::builtin::BuiltinOpResolver resolver;
-        tflite::InterpreterBuilder builder(*acoustic_models[i], resolver);
-        builder(&acoustic_interpreters[i]);
-        if(acoustic_interpreters[i] == nullptr) FATAL_ERROR(std::string("Could not create interpreter for acoustic model ")+std::to_string(i));
-    }
-
     int data_length = wave_data.size();
 
-    for(int i=0;i<acoustic_interpreters.size();i++) {
-        if(i==0) {
-            if( acoustic_interpreters[i]->ResizeInputTensor(0, {1, data_length}) != kTfLiteOk ) FATAL_ERRORS("Could not resize audio input tensor.");
-        } else {
-            if( acoustic_interpreters[i]->ResizeInputTensor(0, {1, data_length, 1280}) != kTfLiteOk ) FATAL_ERRORS("Could not resize hidden state input tensor.");
-        }
-        if(acoustic_interpreters[i]->AllocateTensors() != kTfLiteOk) FATAL_ERRORS("Could not allocate tensors for acoustic model.");
+    for(int i=0;i<4;i++) {
+        const std::string &model_path = data_folder_path + std::string("/acoustic_model_0")+std::to_string(i)+std::string(".tflite");
+        TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO, "Loading %s ...", model_path.c_str());
+        std::unique_ptr<tflite::FlatBufferModel> acoustic_model = tflite::FlatBufferModel::BuildFromFile(model_path.c_str());
+        if(acoustic_model == nullptr) FATAL_ERROR(std::string("Could not load ")+model_path);
 
-        float* audio_input = acoustic_interpreters[i]->typed_input_tensor<float>(0);
+        TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO, "Building interpreter for %s ...", model_path.c_str());
+        std::unique_ptr<tflite::Interpreter> acoustic_interpreter;
+        tflite::ops::builtin::BuiltinOpResolver resolver;
+        //tflite::ops::builtin::BuiltinOpResolverWithoutDefaultDelegates resolver;
+        resolver.AddCustom("FlexErf", Register_ERF());
+        tflite::InterpreterBuilder builder(*acoustic_model, resolver);
+        builder(&acoustic_interpreter);
+        if(acoustic_interpreter == nullptr) FATAL_ERROR(std::string("Could not create interpreter for acoustic model ")+std::to_string(i));
+
+        if( i == 0) {
+            if( acoustic_interpreter->ResizeInputTensorStrict(0, {1, data_length}) != kTfLiteOk ) FATAL_ERRORS("Could not resize audio input tensor.");
+        } else {
+            if( acoustic_interpreter->ResizeInputTensorStrict(0, {1, data_length, 1280}) != kTfLiteOk ) FATAL_ERRORS("Could not resize hidden state input tensor.");
+        }
+        if( acoustic_interpreter->AllocateTensors() != kTfLiteOk) FATAL_ERRORS("Could not allocate tensors for acoustic model.");
+
+        float* audio_input = acoustic_interpreter->typed_input_tensor<float>(0);
         int copy_size = data_length * (i==0 ? 1 : 1280);
         for(int t=0;t<copy_size;t++) audio_input[t] = wave_data[t];
 
-        if(acoustic_interpreters[i]->Invoke() != kTfLiteOk) FATAL_ERRORS("Could not invoke acoustic model.");
+        TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO, "Invoking %s ...", model_path.c_str());
+        if( acoustic_interpreter->Invoke() != kTfLiteOk) FATAL_ERRORS("Could not invoke acoustic model.");
 
-        TfLiteTensor* output = acoustic_interpreters[i]->output_tensor(0);
+        TfLiteTensor* output = acoustic_interpreter->output_tensor(0);
         if(output->dims->size != 3) FATAL_ERRORS("Wrong output dims");
         if(output->dims->data[0] != 1) FATAL_ERRORS("Wrong output dim 0");
         int expected_dim2 = i==3 ? 256 : 1280;
@@ -110,23 +110,34 @@ int main(int argc, char** argv) {
 
         data_length = output->dims->data[1];
         wave_data.clear();
-        float* logit_output = acoustic_interpreters[i]->typed_output_tensor<float>(0);
+        float* logit_output = acoustic_interpreter->typed_output_tensor<float>(0);
         copy_size = data_length * expected_dim2;
         for(int t=0;t<copy_size;t++) wave_data.emplace_back(logit_output[t]);
     }
 
-
-
-
-
-
     lm::ngram::Config config;
     const std::string &lm_path = data_folder_path + std::string("/language_model.bin");
+    TFLITE_LOG_PROD(tflite::TFLITE_LOG_INFO, "Loading language model %s ...", lm_path.c_str());
     lm::ngram::TrieModel language_model(lm_path.c_str(), config);
 
     int token_idx = language_model.GetVocabulary().Index(StringPiece("mückenstiche"));
     if(token_idx != 68501) FATAL_ERRORS("Language model vocabulary is wrong.");
 
-
+    int last_token = 0;
+    for(int t=0;t<data_length;t++) {
+        int max_idx = 0;
+        double max_logit = -5e17;
+        for(int i=0;i<256;i++) {
+            float const& v = wave_data[t * 256 + i];
+            if(v > max_logit) {
+                max_logit = v;
+                max_idx = i;
+            }
+        }
+        if(max_idx != last_token) {
+            last_token = max_idx;
+            std::cout << tokens[max_idx];
+        }
+    }
 
 }
