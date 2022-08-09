@@ -1,6 +1,8 @@
 # TEVR ASR Tool
 
-* state-of-the-art performance
+* state-of-the-art performance 
+  * 3.64% WER on Common Voice German
+  * rank #1 on [paperswithcode.com](https://paperswithcode.com/sota/speech-recognition-on-common-voice-german)
 * no GPU needed
 * 100% offline
 * 100% private
@@ -12,8 +14,11 @@
   * only 284 lines of C++ code
   * AI model on HuggingFace
 
+## Does this work?
+
 In August 2022, we ranked 
-**#1 on "Speech Recognition on Common Voice German (using extra training data)"**.
+**#1 on "Speech Recognition on Common Voice German (using extra training data)"**
+with a 3.64% word error rate.
 Accordingly, the performance of this tool is considered to be
 the best of what's currently possible
 in German speech recognition:
@@ -104,13 +109,18 @@ If you want to get notified when it launches,
 please enter your email at
 https://madmimi.com/signups/f0da3b13840d40ce9e061cafea6280d5/join
 
-## Commercial / GPU Acceleration
+## Commercial Customization
 
-If you have a commercial use-case for this or similar 
+This tool itself is free to use also for commercial use.
+And of course it comes with no warranty of any kind.
+
+But if you have an idea for a commercial use-case for 
+a customized version of this tool or for similar 
 technology - ideally something that helps 
 small and medium-sized businesses in northern Germany
 become more competitive - 
 then please contact me at moin@DeutscheKI.de
+
 
 
 ## Research Citation
