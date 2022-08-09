@@ -1,0 +1,4 @@
+[submodule "tensorflow_src"]
+	path = tensorflow_src
+	url = https://github.com/tensorflow/tensorflow.git
+	branch = 2ea19cbb575d076b4f521d3603211c8316ad5f8f
