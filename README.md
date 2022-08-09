@@ -38,9 +38,16 @@ https://huggingface.co/fxtentacle/wav2vec2-xls-r-1b-tevr
 
 
 ## Install the Debian/Ubuntu package
-Download `tevr_asr_tool-1.0.0-Linux-x86_64.deb` from GitHub:
+Download `tevr_asr_tool-1.0.0-Linux-x86_64.deb` from GitHub
+and extract the multipart ZIP:
 ```bash
-wget "URL_HERE"
+wget "https://github.com/DeutscheKI/tevr-asr-tool/releases/download/v1.0.0/tevr_asr_tool-1.0.0-Linux-x86_64.zip.001"
+wget "https://github.com/DeutscheKI/tevr-asr-tool/releases/download/v1.0.0/tevr_asr_tool-1.0.0-Linux-x86_64.zip.002"
+wget "https://github.com/DeutscheKI/tevr-asr-tool/releases/download/v1.0.0/tevr_asr_tool-1.0.0-Linux-x86_64.zip.003"
+wget "https://github.com/DeutscheKI/tevr-asr-tool/releases/download/v1.0.0/tevr_asr_tool-1.0.0-Linux-x86_64.zip.004"
+wget "https://github.com/DeutscheKI/tevr-asr-tool/releases/download/v1.0.0/tevr_asr_tool-1.0.0-Linux-x86_64.zip.005"
+cat tevr_asr_tool-1.0.0-Linux-x86_64.zip.00* > tevr_asr_tool-1.0.0-Linux-x86_64.zip
+unzip tevr_asr_tool-1.0.0-Linux-x86_64.zip
 ```
 Install it:
 ```bash
